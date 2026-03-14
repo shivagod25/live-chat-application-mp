@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chat App</title>
+<style>
+  /* Blue and black theme - kept visual design as requested, small responsive tweaks added */
+  :root{
+    --bg: #121212;
+    --panel: #1f1f1f;
+    --panel-2: #1a1a1a;
+    --accent: #1976d2;
+    --accent-2: #64b5f6;
+    --bubble-you: #2196f3;
+    --bubble-other: #333;
+    --muted: #90caf9;
+    --danger: #ff5252;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    height: auto;
+    background-color: var(--bg);
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* Top-level layout - avoid using 100vh on nested elements to prevent mobile keyboard issues */
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Login Container - centered box */
+  #login-container, #app {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+
+  #login-container {
+    background-color: var(--panel-2);
+    flex-direction: column;
+    padding: 1.6rem;
+    border-radius: 10px;
+    max-width: 420px;
+    width: calc(100% - 48px);
+    margin: 40px auto;
+    box-shadow: 0 6px 20px rgba(25,118,210,0.08), 0 0 6px rgba(25,118,210,0.04) inset;
+  }
+  #login-container h2 {
+    margin-bottom: 1rem;
+    color: var(--accent-2);
+    font-size: 1.4rem;
+  }
+  #login-container input {
+    width: 100%;
+    margin-bottom: 0.9rem;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: #222;
+    color: #eee;
+    font-size: 0.98rem;
+  }
+  #login-container button {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 0.6rem;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--accent);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+  }
+  #login-container button:hover { background-color: #1565c0; }
+  #login-error { color: #f44336; margin-bottom: 0.4rem; min-height: 1.2rem; font-size:0.92rem; }
+
+  /* App layout - two column (sidebar + main) that becomes stacked on small screens */
+  #app {
+    width: 100%;
+    height: calc(100vh - 16px);
+    max-height: 100dvh; /* prefer dynamic viewport units when available */
+    display: flex;
+    background-color: var(--bg);
+    gap: 0;
+    align-items: stretch;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: 300px;
+    min-width: 240px;
+    background-color: var(--panel);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #333;
+    overflow: hidden;
+  }
+  #tabs { display:flex; gap:0; padding:6px; }
+  #tabs button {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--accent-2);
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  #tabs button.active { border-bottom: 2px solid var(--accent); background-color: var(--bg); }
+  #user-list, #group-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .user-item, .group-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    position: relative;
+  }
+  .user-item:hover, .group-item:hover { background-color: #0d47a1; }
+  .user-item.active, .group-item.active { background-color: var(--accent); color: #fff; }
+
+  .user-avatar, .group-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: 800;
+    margin-right: 12px;
+    position: relative;
+    flex-shrink: 0;
+    font-size: 1rem;
+  }
+  .user-online-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 12px;
+    height: 12px;
+    background-color: #4caf50;
+    border: 2px solid var(--panel);
+    border-radius: 50%;
+  }
+
+  .unread-badge {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    background: var(--danger);
+    color: white;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 18px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    padding: 0 6px;
+  }
+
+  .user-info, .group-info { flex: 1; overflow: hidden; }
+  .user-name, .group-name { font-weight: 700; font-size: 1rem; color: #e0e0e0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .user-subtitle, .group-subtitle { font-size: 0.82rem; color: var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  #create-group-btn {
+    background-color: var(--accent);
+    color: white;
+    border: none;
+    margin: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  #create-group-btn:hover { background-color: #1565c0; }
+
+  /* Chat Column */
+  #chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg);
+    min-width: 0; /* allow flex children to shrink properly */
+  }
+  #chat-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    background-color: var(--panel);
+    gap: 12px;
+  }
+  #chat-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: var(--accent);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+  }
+  #chat-title { font-size: 1.15rem; font-weight: 800; color: #e0e0e0; flex: 1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #logout-btn { background:none; border:none; color: var(--accent-2); cursor:pointer; font-weight:700; }
+
+  /* Chat window area */
+  #chat-window {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    background-color: #181818;
+    -webkit-overflow-scrolling: touch;
+  }
+  .message {
+    max-width: 74%;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+    position: relative;
+    font-size: 1rem;
+    line-height: 1.35;
+    word-wrap: break-word;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.2) inset;
+  }
+  .message.you { margin-left: auto; background-color: var(--bubble-you); color: #fff; border-bottom-right-radius: 6px; }
+  .message.other { background-color: var(--bubble-other); color: #e0e0e0; border-bottom-left-radius: 6px; }
+  .sender-name { font-weight: 800; font-size: 0.88rem; margin-bottom: 6px; color: var(--muted); }
+  .time { font-size: 0.72rem; color: #cfcfcf; position: absolute; bottom: 6px; right: 10px; }
+
+  /* ticks and meta */
+  .meta { position: absolute; bottom: 6px; right: 8px; display:flex; align-items:center; gap:8px; }
+  .tick { font-size: 0.78rem; opacity:0.95; }
+
+  /* Delete button */
+  .delete-btn {
+    display: none;
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+    font-size: 14px;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .message.you:hover .delete-btn { display: flex; }
+
+  /* Image inside chat */
+  .msg-image { display:block; max-width: 320px; max-height: 420px; width:auto; height:auto; margin: 6px 0; border-radius: 8px; object-fit: cover; }
+
+  /* Input bar - sticky to bottom, safe for mobile keyboards (uses env safe area) */
+  #input-bar {
+    display:flex;
+    gap:8px;
+    align-items:center;
+    padding: 10px 14px;
+    border-top: 1px solid #333;
+    background-color: var(--panel);
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    padding-bottom: calc(env(safe-area-inset-bottom, 12px));
+  }
+  #message-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 24px;
+    border: none;
+    font-size: 1rem;
+    outline: none;
+    background-color: #333;
+    color: #eee;
+  }
+  #send-btn {
+    background-color: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  #send-btn:disabled { background-color: #555; cursor: default; }
+  #attach-btn { background:none; border:none; color: var(--accent-2); cursor:pointer; font-size: 1.2rem; }
+
+  /* Modal */
+  #modal-backdrop { position: fixed; inset:0; background-color: rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; z-index:50; }
+  #modal { background-color: var(--panel-2); padding: 18px 22px; border-radius: 10px; max-width: 360px; width: calc(100% - 40px); color: #eee; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
+  #modal h3 { margin: 0 0 8px 0; color: var(--accent-2); }
+  #modal input { width: 100%; padding: 10px; border-radius: 8px; border:none; background:#333; color:#eee; margin-bottom:10px; }
+
+  /* small screens */
+  @media (max-width: 820px) {
+    #sidebar { width: 100%; min-width: 0; height: 220px; border-right:none; border-bottom:1px solid #333; }
+    #app { flex-direction: column; height: 100dvh; max-height: 100dvh; }
+    #chat-container { height: calc(100dvh - 220px); display:flex; flex-direction:column; }
+    .message { max-width: 92%; }
+    #chat-avatar { width:40px; height:40px; }
+    #chat-title { font-size: 1rem; }
+    #user-list, #group-list { padding: 6px; }
+  }
+
+  @media (max-width:420px) {
+    #sidebar { height: 240px; }
+    #login-container { margin: 18px 12px; padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <!-- Login UI -->
+  <div id="login-container">
+    <h2>Login / Register</h2>
+    <input id="email" type="email" placeholder="Email" autocomplete="username" />
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+    <div id="login-error"></div>
+    <button id="login-btn">Login</button>
+    <button id="register-btn">Register</button>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" style="display:none;">
+    <div id="sidebar">
+      <div id="tabs">
+        <button id="users-tab" class="active">Users</button>
+        <button id="groups-tab">Groups</button>
+      </div>
+      <div id="user-list"></div>
+      <div id="group-list" style="display:none;"></div>
+      <button id="create-group-btn">Create Group</button>
+    </div>
+    <div id="chat-container">
+      <div id="chat-header">
+        <div id="chat-avatar"></div>
+        <div id="chat-title">Select user or group</div>
+        <button id="logout-btn">Logout</button>
+      </div>
+      <div id="chat-window">Select a user or group to start chatting</div>
+      <div id="input-bar">
+        <button id="attach-btn" title="Attach image">📎</button>
+        <input id="message-input" placeholder="Type a message..." disabled />
+        <button id="send-btn" disabled>✈️</button>
+        <!-- hidden file input for images -->
+        <input id="image-input" type="file" accept="image/*" style="display:none;" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for entering group password -->
+  <div id="modal-backdrop">
+    <div id="modal">
+      <h3 id="modal-title">Enter group password</h3>
+      <input id="modal-password" type="password" placeholder="Group password" />
+      <div style="text-align:right;">
+        <button id="modal-ok-btn">OK</button>
+        <button id="modal-cancel-btn" class="cancel">Cancel</button>
+      </div>
+      <div id="modal-error" style="color:#f44336; margin-top:8px; min-height:1.2rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+  import {
+    getFirestore, collection, doc, setDoc, getDoc, getDocs,
+    query, where, onSnapshot, addDoc, orderBy, updateDoc, serverTimestamp, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+  import {
+    getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+    createUserWithEmailAndPassword, signOut
+  } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+  import {
+    getStorage, ref as storageRef, uploadBytes, getDownloadURL
+  } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+
+  // ---------- FIREBASE CONFIG (replace with your config if needed) ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyAu3mJ-VSwhRcPhfwktEL2YxZ6UWeMOskM",
+    authDomain: "livechat-93ef5.firebaseapp.com",
+    projectId: "livechat-93ef5",
+    storageBucket: "livechat-93ef5.appspot.com",
+    messagingSenderId: "995736765937",
+    appId: "1:995736765937:web:90fc27909d25fc44d9f050",
+    measurementId: "G-MXQHQ71MCJ"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const storage = getStorage(app);
+
+  // ---------- ELEMENTS ----------
+  const loginContainer = document.getElementById("login-container");
+  const loginError = document.getElementById("login-error");
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const loginBtn = document.getElementById("login-btn");
+  const registerBtn = document.getElementById("register-btn");
+
+  const appContainer = document.getElementById("app");
+  const userListEl = document.getElementById("user-list");
+  const groupListEl = document.getElementById("group-list");
+  const usersTabBtn = document.getElementById("users-tab");
+  const groupsTabBtn = document.getElementById("groups-tab");
+  const createGroupBtn = document.getElementById("create-group-btn");
+
+  const chatWindow = document.getElementById("chat-window");
+  const chatTitle = document.getElementById("chat-title");
+  const chatAvatar = document.getElementById("chat-avatar");
+  const messageInput = document.getElementById("message-input");
+  const sendBtn = document.getElementById("send-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  const attachBtn = document.getElementById("attach-btn");
+  const imageInput = document.getElementById("image-input");
+
+  const modalBackdrop = document.getElementById("modal-backdrop");
+  const modalTitle = document.getElementById("modal-title");
+  const modalPasswordInput = document.getElementById("modal-password");
+  const modalOkBtn = document.getElementById("modal-ok-btn");
+  const modalCancelBtn = document.getElementById("modal-cancel-btn");
+  const modalError = document.getElementById("modal-error");
+
+  // ---------- STATE ----------
+  let currentUser = null;
+  let selectedChat = null; // {type: 'user'|'group', id, name}
+  let unsubscribeMessages = null;
+  let joinGroupCallback = null;
+  let heartbeatInterval = null;
+  let currentMessagesCollectionRef = null;
+  const unreadCounts = {}; // key: chatId -> number
+
+  // Background listeners bookkeeping (to avoid attaching same onSnapshot repeatedly)
+  const bgGroupUnsubs = new Map(); // groupId -> unsubscribe function
+  const bgPrivateUnsubs = new Map(); // chatId -> unsubscribe
+
+  // ---------- UTILITIES ----------
+  function playNotificationSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      g.gain.value = 0.02;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      setTimeout(() => {
+        o.stop();
+        ctx.close();
+      }, 110);
+    } catch (e) {}
+  }
+
+  async function ensureNotificationPermission() {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission !== "denied") {
+      try {
+        const p = await Notification.requestPermission();
+        return p === "granted";
+      } catch (e) { return false; }
+    }
+    return false;
+  }
+
+  function showBrowserNotification(title, body, tag) {
+    try {
+      if (Notification.permission === "granted") {
+        const n = new Notification(title, { body, tag });
+        n.onclick = () => window.focus();
+      }
+    } catch (e) {}
+  }
+
+  function timeAgo(date) {
+    if (!date) return "";
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 5) return "just now";
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  // ---------- AUTH HANDLERS ----------
+  loginBtn.addEventListener("click", async () => {
+    loginError.textContent = "";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+      loginError.textContent = "Email and password required.";
+      return;
+    }
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      loginError.textContent = error.message || "Login failed";
+    }
+  });
+
+  registerBtn.addEventListener("click", async () => {
+    loginError.textContent = "";
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+      loginError.textContent = "Email and password required.";
+      return;
+    }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, "users", userCredential.user.uid), {
+        email: email,
+        displayName: email.split("@")[0],
+        online: true,
+        lastActive: serverTimestamp()
+      });
+    } catch (error) {
+      loginError.textContent = error.message || "Registration failed";
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    if (currentUser) {
+      try { await updateDoc(doc(db, "users", currentUser.uid), { online: false, lastActive: serverTimestamp() }); } catch {}
+      await signOut(auth);
+    }
+  });
+
+  window.addEventListener("beforeunload", async () => {
+    if (currentUser) {
+      try { await updateDoc(doc(db, "users", currentUser.uid), { online: false, lastActive: serverTimestamp() }); } catch {}
+    }
+  });
+
+  // ---------- AUTH STATE ----------
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      loginContainer.style.display = "none";
+      appContainer.style.display = "flex";
+
+      // create/update user record
+      try {
+        await updateDoc(doc(db, "users", user.uid), { online: true, lastActive: serverTimestamp() });
+      } catch (e) {
+        try {
+          await setDoc(doc(db, "users", user.uid), {
+            email: user.email,
+            displayName: user.email.split("@")[0],
+            online: true,
+            lastActive: serverTimestamp()
+          });
+        } catch (err) {}
+      }
+
+      // notification ask
+      ensureNotificationPermission();
+
+      // heartbeat: update lastActive frequently
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = setInterval(async () => {
+        if (!currentUser) return;
+        try { await updateDoc(doc(db, "users", currentUser.uid), { lastActive: serverTimestamp(), online: true }); } catch {}
+      }, 30000);
+
+      loadUserList();
+      loadGroupList();
+
+      // start background watches (with slight delay so lists render)
+      setTimeout(watchForNotifications, 800);
+    } else {
+      currentUser = null;
+      appContainer.style.display = "none";
+      loginContainer.style.display = "flex";
+      selectedChat = null;
+      chatTitle.textContent = "Select user or group";
+      chatAvatar.textContent = "";
+      chatWindow.textContent = "Select a user or group to start chatting";
+      messageInput.disabled = true;
+      sendBtn.disabled = true;
+      if (unsubscribeMessages) { unsubscribeMessages(); unsubscribeMessages = null; }
+      currentMessagesCollectionRef = null;
+      if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+
+      // cleanup background unsubscribers
+      bgGroupUnsubs.forEach(u => { try { u(); } catch {} });
+      bgGroupUnsubs.clear();
+      bgPrivateUnsubs.forEach(u => { try { u(); } catch {} });
+      bgPrivateUnsubs.clear();
+    }
+  });
+
+  // ---------- LOAD USER LIST ----------
+  function loadUserList() {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef);
+    onSnapshot(q, (snapshot) => {
+      userListEl.innerHTML = "";
+      snapshot.docs.forEach(docSnap => {
+        if (!currentUser) return;
+        if (docSnap.id === currentUser.uid) return;
+        const userData = docSnap.data();
+        const userItem = document.createElement("div");
+        userItem.className = "user-item";
+        userItem.dataset.userid = docSnap.id;
+
+        const avatar = document.createElement("div");
+        avatar.className = "user-avatar";
+        avatar.textContent = userData.displayName ? userData.displayName[0].toUpperCase() : "?";
+        if (userData.online) {
+          const onlineDot = document.createElement("div");
+          onlineDot.className = "user-online-dot";
+          avatar.appendChild(onlineDot);
+        }
+        userItem.appendChild(avatar);
+
+        const unreadBadge = document.createElement("div");
+        unreadBadge.className = "unread-badge";
+        unreadBadge.textContent = "0";
+        userItem.appendChild(unreadBadge);
+
+        const info = document.createElement("div");
+        info.className = "user-info";
+        const name = document.createElement("div");
+        name.className = "user-name";
+        name.textContent = userData.displayName || userData.email;
+        info.appendChild(name);
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "user-subtitle";
+        if (userData.online) {
+          subtitle.textContent = "Online";
+        } else if (userData.lastActive && userData.lastActive.toDate) {
+          subtitle.textContent = `Last active ${timeAgo(userData.lastActive.toDate())}`;
+        } else {
+          subtitle.textContent = "Offline";
+        }
+        info.appendChild(subtitle);
+
+        userItem.appendChild(info);
+
+        userItem.addEventListener("click", () => {
+          selectChat({ type: "user", id: docSnap.id, name: userData.displayName || userData.email });
+          setActiveItem(userItem, userListEl);
+          clearActiveItem(groupListEl);
+          unreadBadge.style.display = "none";
+          unreadBadge.textContent = "0";
+          unreadCounts[`private_${docSnap.id}`] = 0;
+        });
+
+        userListEl.appendChild(userItem);
+      });
+    });
+  }
+
+  // ---------- LOAD GROUP LIST ----------
+  function loadGroupList() {
+    const groupsRef = collection(db, "groups");
+    const q = query(groupsRef);
+    onSnapshot(q, (snapshot) => {
+      groupListEl.innerHTML = "";
+      snapshot.docs.forEach(docSnap => {
+        const groupData = docSnap.data();
+        const groupItem = document.createElement("div");
+        groupItem.className = "group-item";
+        groupItem.dataset.groupid = docSnap.id;
+
+        const avatar = document.createElement("div");
+        avatar.className = "group-avatar";
+        avatar.textContent = groupData.name ? groupData.name[0].toUpperCase() : "#";
+        groupItem.appendChild(avatar);
+
+        const unreadBadge = document.createElement("div");
+        unreadBadge.className = "unread-badge";
+        unreadBadge.textContent = "0";
+        groupItem.appendChild(unreadBadge);
+
+        const info = document.createElement("div");
+        info.className = "group-info";
+        const name = document.createElement("div");
+        name.className = "group-name";
+        name.textContent = groupData.name || "Unnamed Group";
+        info.appendChild(name);
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "group-subtitle";
+        subtitle.textContent = `Members: ${groupData.members?.length || 0}`;
+        info.appendChild(subtitle);
+
+        groupItem.appendChild(info);
+
+        groupItem.addEventListener("click", () => {
+          if (!currentUser) return;
+          if (!groupData.members || !groupData.members.includes(currentUser.uid)) {
+            openGroupPasswordModal(docSnap.id, groupData.name || "Group", groupData.password || "");
+          } else {
+            selectChat({ type: "group", id: docSnap.id, name: groupData.name || "Group" });
+            setActiveItem(groupItem, groupListEl);
+            clearActiveItem(userListEl);
+            unreadBadge.style.display = "none";
+            unreadBadge.textContent = "0";
+            unreadCounts[`group_${docSnap.id}`] = 0;
+          }
+        });
+
+        groupListEl.appendChild(groupItem);
+      });
+    });
+  }
+
+  // ---------- GROUP PASSWORD MODAL ----------
+  function openGroupPasswordModal(groupId, groupName, groupPassword) {
+    modalTitle.textContent = `Enter password to join "${groupName}"`;
+    modalPasswordInput.value = "";
+    modalError.textContent = "";
+    modalBackdrop.style.display = "flex";
+
+    joinGroupCallback = async () => {
+      const inputPassword = modalPasswordInput.value;
+      if (inputPassword === groupPassword) {
+        try {
+          const groupRef = doc(db, "groups", groupId);
+          const groupSnap = await getDoc(groupRef);
+          if (!groupSnap.exists()) {
+            modalError.textContent = "Group no longer exists.";
+            return;
+          }
+          let members = groupSnap.data().members || [];
+          if (!members.includes(currentUser.uid)) {
+            members.push(currentUser.uid);
+            await updateDoc(groupRef, { members });
+          }
+          modalBackdrop.style.display = "none";
+          selectChat({ type: "group", id: groupId, name: groupName });
+          // highlight in UI
+          [...groupListEl.children].forEach(item => {
+            item.classList.toggle("active", item.dataset.groupid === groupId);
+          });
+          clearActiveItem(userListEl);
+        } catch (err) {
+          modalError.textContent = "Failed to join group.";
+        }
+      } else {
+        modalError.textContent = "Incorrect password.";
+      }
+    };
+  }
+
+  modalOkBtn.addEventListener("click", () => {
+    if (joinGroupCallback) joinGroupCallback();
+  });
+  modalCancelBtn.addEventListener("click", () => {
+    modalBackdrop.style.display = "none";
+    modalError.textContent = "";
+  });
+
+  // ---------- SELECT CHAT ----------
+  function selectChat(chat) {
+    if (!currentUser) return;
+    if (unsubscribeMessages) { unsubscribeMessages(); unsubscribeMessages = null; }
+    selectedChat = chat;
+    chatTitle.textContent = chat.name;
+    chatAvatar.textContent = chat.name[0] ? chat.name[0].toUpperCase() : "#";
+    chatWindow.innerHTML = "";
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
+
+    const scrollToBottom = () => {
+      setTimeout(() => {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }, 60);
+    };
+
+    // PRIVATE CHAT
+    if (chat.type === "user") {
+      const chatId = [currentUser.uid, chat.id].sort().join("_");
+      const messagesRef = collection(db, "privateChats", chatId, "messages");
+      const q = query(messagesRef, orderBy("timestamp", "asc"));
+      currentMessagesCollectionRef = messagesRef;
+
+      unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        chatWindow.innerHTML = "";
+        snapshot.docs.forEach(docSnap => {
+          const msg = docSnap.data();
+          // Mark delivered if not by me
+          if (msg.senderId !== currentUser.uid && !msg.delivered) {
+            try { updateDoc(doc(messagesRef, docSnap.id), { delivered: true }); } catch {}
+          }
+          appendMessage(msg, docSnap.id, messagesRef);
+        });
+        scrollToBottom();
+      });
+
+      // Send text
+      sendBtn.onclick = async () => {
+        const text = messageInput.value.trim();
+        if (!text) return;
+        try {
+          await addDoc(messagesRef, {
+            senderId: currentUser.uid,
+            text,
+            type: "text",
+            timestamp: serverTimestamp(),
+            stored: true,
+            delivered: false
+          });
+          messageInput.value = "";
+          scrollToBottom();
+        } catch (err) { console.error("Send error:", err); }
+      };
+
+      // image
+      attachBtn.onclick = () => imageInput.click();
+      imageInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        // Client-side guard to match your storage rules (5MB and image/*)
+        const MAX = 5 * 1024 * 1024;
+        if (!file.type.startsWith("image/")) { alert("Please select an image file."); imageInput.value = ""; return; }
+        if (file.size > MAX) { alert("Image too large — max 5 MB."); imageInput.value = ""; return; }
+
+        // Build storage path that matches your rules: user_uploads/{userId}/{chatId}/{filename}
+        const chatIdentifier = `private_${chatId}`;
+        const path = `user_uploads/${currentUser.uid}/${chatIdentifier}/${Date.now()}_${file.name}`;
+        const ref = storageRef(storage, path);
+        try {
+          // include content type metadata
+          await uploadBytes(ref, file, { contentType: file.type });
+          const url = await getDownloadURL(ref);
+          await addDoc(messagesRef, {
+            senderId: currentUser.uid,
+            text: file.name,
+            type: "image",
+            imageUrl: url,
+            timestamp: serverTimestamp(),
+            stored: true,
+            delivered: false
+          });
+          imageInput.value = "";
+          scrollToBottom();
+        } catch (err) {
+          console.error("Upload error:", err);
+          alert("Failed to upload image. See console for details.");
+        }
+      };
+    }
+
+    // GROUP CHAT
+    else if (chat.type === "group") {
+      const messagesRef = collection(db, "groups", chat.id, "messages");
+      const q = query(messagesRef, orderBy("timestamp", "asc"));
+      currentMessagesCollectionRef = messagesRef;
+
+      unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        chatWindow.innerHTML = "";
+        snapshot.docs.forEach(docSnap => {
+          const msg = docSnap.data();
+          if (msg.senderId !== currentUser.uid && !msg.delivered) {
+            try { updateDoc(doc(messagesRef, docSnap.id), { delivered: true }); } catch {}
+          }
+          appendMessage(msg, docSnap.id, messagesRef);
+        });
+        scrollToBottom();
+      });
+
+      sendBtn.onclick = async () => {
+        const text = messageInput.value.trim();
+        if (!text) return;
+        try {
+          await addDoc(messagesRef, {
+            senderId: currentUser.uid,
+            text,
+            type: "text",
+            timestamp: serverTimestamp(),
+            stored: true,
+            delivered: false
+          });
+          messageInput.value = "";
+          scrollToBottom();
+        } catch (err) { console.error("Send error:", err); }
+      };
+
+      attachBtn.onclick = () => imageInput.click();
+      imageInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const MAX = 5 * 1024 * 1024;
+        if (!file.type.startsWith("image/")) { alert("Please select an image file."); imageInput.value = ""; return; }
+        if (file.size > MAX) { alert("Image too large — max 5 MB."); imageInput.value = ""; return; }
+
+        // Storage path for group: user_uploads/{userId}/{chatIdentifier}/{filename}
+        const chatIdentifier = `group_${chat.id}`;
+        const path = `user_uploads/${currentUser.uid}/${chatIdentifier}/${Date.now()}_${file.name}`;
+        const ref = storageRef(storage, path);
+        try {
+          await uploadBytes(ref, file, { contentType: file.type });
+          const url = await getDownloadURL(ref);
+          await addDoc(messagesRef, {
+            senderId: currentUser.uid,
+            text: file.name,
+            type: "image",
+            imageUrl: url,
+            timestamp: serverTimestamp(),
+            stored: true,
+            delivered: false
+          });
+          imageInput.value = "";
+          scrollToBottom();
+        } catch (err) {
+          console.error("Upload error:", err);
+          alert("Failed to upload image. See console for details.");
+        }
+      };
+    }
+  }
+
+  // ---------- APPEND MESSAGE ----------
+  async function appendMessage(msg, msgId, messagesCollectionRef) {
+    const messageEl = document.createElement("div");
+    messageEl.className = "message";
+    const amISender = msg.senderId === currentUser.uid;
+    messageEl.classList.add(amISender ? "you" : "other");
+    messageEl.dataset.msgid = msgId || "";
+
+    // Delete button for own messages
+    if (amISender) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "delete-btn";
+      delBtn.title = "Delete message";
+      delBtn.textContent = "🗑";
+      delBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const confirmDelete = confirm("Delete this message permanently?");
+        if (!confirmDelete) return;
+        try {
+          await deleteDoc(doc(messagesCollectionRef, msgId));
+        } catch (err) {
+          console.error("Delete failed:", err);
+          alert("Failed to delete message.");
+        }
+      });
+      messageEl.appendChild(delBtn);
+    }
+
+    // For group chats, show sender name (if not me)
+    if (selectedChat && selectedChat.type === "group" && !amISender) {
+      try {
+        const senderDoc = await getDoc(doc(db, "users", msg.senderId));
+        const senderName = senderDoc.exists() ? (senderDoc.data().displayName || senderDoc.data().email) : "Unknown";
+        const senderEl = document.createElement("div");
+        senderEl.className = "sender-name";
+        senderEl.textContent = senderName;
+        messageEl.appendChild(senderEl);
+      } catch (e) { /* ignore */ }
+    }
+
+    if (msg.type === "image" && msg.imageUrl) {
+      const img = document.createElement("img");
+      img.className = "msg-image";
+      img.src = msg.imageUrl;
+      img.alt = msg.text || "image";
+      messageEl.appendChild(img);
+      if (msg.text) {
+        const caption = document.createElement("div");
+        caption.style.fontSize = "0.9rem";
+        caption.style.marginTop = "6px";
+        caption.textContent = msg.text;
+        messageEl.appendChild(caption);
+      }
+    } else {
+      const textEl = document.createElement("div");
+      textEl.textContent = msg.text || "";
+      messageEl.appendChild(textEl);
+    }
+
+    // Meta (time + ticks)
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const timeEl = document.createElement("div");
+    timeEl.className = "time";
+    if (msg.timestamp && msg.timestamp.toDate) {
+      const date = msg.timestamp.toDate();
+      timeEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      timeEl.textContent = "";
+    }
+    meta.appendChild(timeEl);
+
+    if (amISender) {
+      const tickEl = document.createElement("div");
+      tickEl.className = "tick";
+      // stored = single tick, delivered = double tick
+      if (msg.delivered) {
+        tickEl.textContent = "✓✓";
+        tickEl.title = "Delivered";
+      } else if (msg.stored) {
+        tickEl.textContent = "✓";
+        tickEl.title = "Stored on server";
+      } else {
+        tickEl.textContent = "";
+      }
+      meta.appendChild(tickEl);
+    }
+
+    messageEl.appendChild(meta);
+    chatWindow.appendChild(messageEl);
+  }
+
+  // ---------- UI UTILITIES ----------
+  function setActiveItem(item, container) {
+    [...container.children].forEach(child => child.classList.remove("active"));
+    if (item) item.classList.add("active");
+  }
+  function clearActiveItem(container) {
+    [...container.children].forEach(child => child.classList.remove("active"));
+  }
+
+  usersTabBtn.addEventListener("click", () => {
+    usersTabBtn.classList.add("active");
+    groupsTabBtn.classList.remove("active");
+    userListEl.style.display = "block";
+    groupListEl.style.display = "none";
+  });
+  groupsTabBtn.addEventListener("click", () => {
+    groupsTabBtn.classList.add("active");
+    usersTabBtn.classList.remove("active");
+    groupListEl.style.display = "block";
+    userListEl.style.display = "none";
+  });
+
+  createGroupBtn.addEventListener("click", async () => {
+    if (!currentUser) return alert("Not logged in");
+    const groupName = prompt("Enter group name:");
+    if (!groupName) return alert("Group name is required.");
+    const groupPassword = prompt("Set a group password (required for joining):");
+    if (!groupPassword) return alert("Group password is required.");
+
+    const groupsRef = collection(db, "groups");
+    try {
+      await addDoc(groupsRef, {
+        name: groupName,
+        password: groupPassword,
+        members: [currentUser.uid],
+        createdAt: serverTimestamp()
+      });
+      alert(`Group "${groupName}" created successfully!`);
+    } catch (err) {
+      alert("Error creating group: " + (err.message || err));
+    }
+  });
+
+  // ---------- BACKGROUND WATCHERS (UNREAD + NOTIFICATIONS) ----------
+  function watchForNotifications() {
+    if (!currentUser) return;
+
+    // Groups: attach per-group listener (avoid duplicates)
+    const groupsRef = collection(db, "groups");
+    onSnapshot(groupsRef, (snap) => {
+      snap.docs.forEach(groupDoc => {
+        const groupId = groupDoc.id;
+        const groupData = groupDoc.data();
+        // attach listener only once per group
+        if (bgGroupUnsubs.has(groupId)) return;
+        const groupMessagesRef = collection(db, "groups", groupId, "messages");
+        const q = query(groupMessagesRef, orderBy("timestamp", "desc"));
+        const unsub = onSnapshot(q, (msgsSnap) => {
+          if (!currentUser) return;
+          if (msgsSnap.docs.length === 0) return;
+          const latest = msgsSnap.docs[0];
+          const data = latest.data();
+          if (!data) return;
+          if (data.senderId === currentUser.uid) return;
+          if (!groupData.members || !groupData.members.includes(currentUser.uid)) return;
+          if (selectedChat && selectedChat.type === "group" && selectedChat.id === groupId) return;
+          const key = `group_${groupId}`;
+          unreadCounts[key] = (unreadCounts[key] || 0) + 1;
+          const groupItem = [...groupListEl.children].find(c => c.dataset.groupid === groupId);
+          if (groupItem) {
+            const badge = groupItem.querySelector(".unread-badge");
+            if (badge) { badge.style.display = "flex"; badge.textContent = unreadCounts[key] > 99 ? "99+" : String(unreadCounts[key]); }
+          }
+          (async () => {
+            const allowed = await ensureNotificationPermission();
+            if (allowed) {
+              let senderName = "Someone";
+              try {
+                const sDoc = await getDoc(doc(db, "users", data.senderId));
+                if (sDoc.exists()) senderName = sDoc.data().displayName || sDoc.data().email;
+              } catch (e) {}
+              const title = `${senderName} @ ${groupData.name || "Group"}`;
+              const body = data.type === "image" ? "Sent an image" : (data.text || "New message");
+              showBrowserNotification(title, body, `group_${groupId}`);
+            }
+            playNotificationSound();
+          })();
+        });
+        bgGroupUnsubs.set(groupId, unsub);
+      });
+    });
+
+    // Private chats: attach per-user listeners (avoid duplicates)
+    const usersRef = collection(db, "users");
+    onSnapshot(usersRef, (snap) => {
+      if (!currentUser) return;
+      snap.docs.forEach(userDoc => {
+        const uid = userDoc.id;
+        if (uid === currentUser.uid) return;
+        const chatId = [currentUser.uid, uid].sort().join("_");
+        if (bgPrivateUnsubs.has(chatId)) return;
+        const messagesRef = collection(db, "privateChats", chatId, "messages");
+        const q = query(messagesRef, orderBy("timestamp", "desc"));
+        const unsub = onSnapshot(q, (msgsSnap) => {
+          if (!currentUser) return;
+          if (msgsSnap.docs.length === 0) return;
+          const latest = msgsSnap.docs[0];
+          const data = latest.data();
+          if (!data) return;
+          if (data.senderId === currentUser.uid) return;
+          if (selectedChat && selectedChat.type === "user" && selectedChat.id === uid) return;
+          const key = `private_${uid}`;
+          unreadCounts[key] = (unreadCounts[key] || 0) + 1;
+          const userItem = [...userListEl.children].find(c => c.dataset.userid === uid);
+          if (userItem) {
+            const badge = userItem.querySelector(".unread-badge");
+            if (badge) { badge.style.display = "flex"; badge.textContent = unreadCounts[key] > 99 ? "99+" : String(unreadCounts[key]); }
+          }
+          (async () => {
+            const allowed = await ensureNotificationPermission();
+            if (allowed) {
+              let senderName = userDoc.data().displayName || userDoc.data().email;
+              const title = senderName;
+              const body = data.type === "image" ? "Sent an image" : (data.text || "New message");
+              showBrowserNotification(title, body, `private_${chatId}`);
+            }
+            playNotificationSound();
+          })();
+        });
+        bgPrivateUnsubs.set(chatId, unsub);
+      });
+    });
+  }
+
+  // keep chat scrolled when keyboard opens/resizes on mobile
+  window.addEventListener('resize', () => {
+    setTimeout(() => { if (chatWindow) chatWindow.scrollTop = chatWindow.scrollHeight; }, 150);
+  });
+</script>
+</body>
+</html>
